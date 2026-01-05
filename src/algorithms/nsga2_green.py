@@ -3,7 +3,7 @@ NSGA-II Green Algorithm for Energy-Aware Service Composition
 """
 
 import numpy as np
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from src.algorithms import BaseAlgorithm
 from src.models import CompositionProblem, Composition
 
