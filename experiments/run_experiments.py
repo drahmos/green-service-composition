@@ -17,7 +17,8 @@ import tracemalloc
 from src.models import CompositionProblem, Composition
 from src.datasets import DatasetGenerator, DatasetConfig, generate_dataset
 from src.algorithms import NSGAIIGreen
-from src.algorithms.baselines import QoSGreedy, EnergyGreedy, RandomSearch, MOPSOGreen, GeneticAlgorithmQoS
+from src.algorithms.baselines import QoSGreedy, CarbonGreedy, RandomSearch, MOPSOGreen, GeneticAlgorithmQoS
+
 from src.evaluation import MetricsCalculator, StatisticalAnalyzer
 from src.visualization import PaperVisualizer, ResultsFormatter
 
@@ -45,15 +46,17 @@ class ExperimentResult:
     memory_peak: float
     metrics: Dict
     pareto_size: int
-    best_energy: float
+    best_carbon: float
     best_response_time: float
     hypervolume: float
+
 
 
 class ExperimentRunner:
     """Complete experiment runner with parallel execution."""
     
-    def __init__(self, config: ExperimentConfig = None):
+    def __init__(self, config: Optional[ExperimentConfig] = None):
+
         self.config = config or ExperimentConfig()
         self.problems = {}
         self.results: List[ExperimentResult] = []
@@ -115,7 +118,7 @@ class ExperimentRunner:
                 seed=42
             ),
             'QoS-Greedy': lambda: QoSGreedy(objective='response_time'),
-            'Energy-Greedy': lambda: EnergyGreedy(),
+            'Carbon-Greedy': lambda: CarbonGreedy(),
             'GA-QoS': lambda: GeneticAlgorithmQoS(
                 population_size=self.config.population_size,
                 num_generations=self.config.num_generations,
@@ -126,6 +129,7 @@ class ExperimentRunner:
                 seed=42
             )
         }
+
     
     def run_single_experiment(
         self,
@@ -160,10 +164,11 @@ class ExperimentRunner:
                 memory_peak=peak / 1024 / 1024,  # MB
                 metrics=metrics,
                 pareto_size=len(pareto_solutions),
-                best_energy=metrics.get('min_energy', float('inf')),
+                best_carbon=metrics.get('min_carbon', float('inf')),
                 best_response_time=metrics.get('min_response_time', float('inf')),
                 hypervolume=metrics.get('hypervolume', 0.0)
             )
+
             
         except Exception as e:
             runtime = time.time() - start_time
@@ -177,10 +182,11 @@ class ExperimentRunner:
                 memory_peak=0.0,
                 metrics={},
                 pareto_size=0,
-                best_energy=float('inf'),
+                best_carbon=float('inf'),
                 best_response_time=float('inf'),
                 hypervolume=0.0
             )
+
         
         return result
     
@@ -219,7 +225,8 @@ class ExperimentRunner:
         print(f"Completed {total_experiments} experiments")
         return self.results
     
-    def run_scalability_test(self, sizes: List[int] = None):
+    def run_scalability_test(self, sizes: Optional[List[int]] = None):
+
         """Run scalability test with varying problem sizes."""
         if sizes is None:
             sizes = [5, 10, 15, 20, 25]
@@ -259,14 +266,15 @@ class ExperimentRunner:
                 continue
             
             hv_values = [r['hypervolume'] for r in runs if r['hypervolume'] > 0]
-            energy_values = [r['best_energy'] for r in runs if r['best_energy'] < float('inf')]
+            carbon_values = [r['best_carbon'] for r in runs if r['best_carbon'] < float('inf')]
             runtime_values = [r['runtime'] for r in runs]
             
             analysis[algo_name] = {
                 'hypervolume_mean': np.mean(hv_values) if hv_values else 0,
                 'hypervolume_std': np.std(hv_values) if hv_values else 0,
-                'energy_mean': np.mean(energy_values) if energy_values else 0,
-                'energy_std': np.std(energy_values) if energy_values else 0,
+                'carbon_mean': np.mean(carbon_values) if carbon_values else 0,
+                'carbon_std': np.std(carbon_values) if carbon_values else 0,
+
                 'runtime_mean': np.mean(runtime_values),
                 'runtime_std': np.std(runtime_values),
                 'num_solutions_mean': np.mean([r['pareto_size'] for r in runs]),
@@ -348,11 +356,11 @@ class ExperimentRunner:
             "\\label{tab:algorithm_comparison}",
             "\\begin{tabular}{lrrrrrr}",
             "\\hline",
-            "Algorithm & HV ($\\times 10^6$) & $|PF|$ & Energy (J) & RT (ms) & Time (s) \\\\",
+            "Algorithm & HV ($\\times 10^6$) & $|PF|$ & Carbon (kg) & RT (ms) & Time (s) \\\\",
             "\\hline"
         ]
         
-        for algo_name in ['NSGA-II-Green', 'MOPSO-Green', 'QoS-Greedy', 'Energy-Greedy', 'GA-QoS', 'Random']:
+        for algo_name in ['NSGA-II-Green', 'MOPSO-Green', 'QoS-Greedy', 'Carbon-Greedy', 'GA-QoS', 'Random']:
             if algo_name not in analysis:
                 continue
             
@@ -361,10 +369,11 @@ class ExperimentRunner:
                 f"{algo_name} & "
                 f"${a['hypervolume_mean']/1e6:.2f} \\pm {a['hypervolume_std']/1e6:.2f}$ & "
                 f"${a['num_solutions_mean']:.1f} \\pm {a['pareto_size_std']:.1f}$ & "
-                f"${a['energy_mean']:.2f} \\pm {a['energy_std']:.2f}$ & "
+                f"${a['carbon_mean']:.4f} \\pm {a['carbon_std']:.4f}$ & "
                 f"${a.get('best_response_time', 0):.1f}$ & "
                 f"${a['runtime_mean']:.2f} \\pm {a['runtime_std']:.2f}$ \\\\"
             )
+
         
         table_lines.extend([
             "\\hline",
@@ -401,36 +410,35 @@ class ExperimentRunner:
                           "energy-aware approach compared to QoS-only baselines.")
         latex_output.append("")
         
-        # Energy comparison table
-        energy_table = [
+        # Carbon footprint table
+        carbon_table = [
             "\\begin{table}[ht]",
             "\\centering",
-            "\\caption{Energy consumption comparison. Greedy baseline represents minimum possible energy.}",
-            "\\label{tab:energy_savings}",
+            "\\caption{Carbon footprint comparison across algorithms. Carbon-Greedy represents minimum possible emissions.}",
+            "\\label{tab:carbon_comparison}",
             "\\begin{tabular}{lrrr}",
             "\\hline",
-            "Algorithm & Energy (J) & Savings vs QoS-Greedy & Carbon (kg CO2) \\\\",
+            "Algorithm & Carbon (kg) & Savings vs QoS-Greedy \\\\",
             "\\hline"
         ]
         
-        qos_energy = analysis.get('QoS-Greedy', {}).get('energy_mean', 100)
-        for algo_name in ['NSGA-II-Green', 'MOPSO-Green', 'Energy-Greedy', 'QoS-Greedy']:
+        qos_carbon = analysis.get('QoS-Greedy', {}).get('carbon_mean', 1.0)
+        for algo_name in ['NSGA-II-Green', 'MOPSO-Green', 'Carbon-Greedy', 'QoS-Greedy']:
             if algo_name not in analysis:
                 continue
             
             a = analysis[algo_name]
-            savings = (qos_energy - a['energy_mean']) / qos_energy * 100
-            carbon = a['energy_mean'] * 0.3  # Approximate carbon factor
+            savings = (qos_carbon - a['carbon_mean']) / qos_carbon * 100
             
-            energy_table.append(
+            carbon_table.append(
                 f"{algo_name} & "
-                f"${a['energy_mean']:.2f}$ & "
-                f"${savings:.1f}\\%$ & "
-                f"${carbon:.4f}$ \\\\"
+                f"${a['carbon_mean']:.4f}$ & "
+                f"${savings:.1f}\\%$ \\\\"
             )
         
-        energy_table.extend(["\\hline", "\\end{tabular}", "\\end{table}", ""])
-        latex_output.extend(energy_table)
+        carbon_table.extend(["\\hline", "\\end{tabular}", "\\end{table}", ""])
+        latex_output.extend(carbon_table)
+
         
         # Scalability
         latex_output.append("\\subsection{Scalability Analysis}")
@@ -514,11 +522,12 @@ class ExperimentRunner:
                 'HV_Mean': a['hypervolume_mean'],
                 'HV_Std': a['hypervolume_std'],
                 'Num_Solutions': a['num_solutions_mean'],
-                'Energy_Mean': a['energy_mean'],
-                'Energy_Std': a['energy_std'],
+                'Carbon_Mean': a['carbon_mean'],
+                'Carbon_Std': a['carbon_std'],
                 'Runtime_Mean': a['runtime_mean'],
                 'Runtime_Std': a['runtime_std']
             })
+
         
         df = pd.DataFrame(rows)
         df.to_csv(self.processed_dir / "summary_results.csv", index=False)

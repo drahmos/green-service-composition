@@ -5,9 +5,10 @@ Synthetic Dataset Generator for Service Composition
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Tuple, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from src.models import Service, ServiceCategory, CompositionProblem
+
+from src.models import Service, ServiceCategory, CompositionProblem, EnergyModel
 
 
 @dataclass
@@ -20,7 +21,7 @@ class DatasetConfig:
     availability_range: Tuple[float, float] = (0.9, 0.999)
     throughput_range: Tuple[float, float] = (10.0, 1000.0)
     energy_correlation: float = 0.7  # Correlation between response time and energy
-    carbon_factors: Dict[str, float] = None
+    carbon_factors: Dict[str, float] = field(default_factory=dict)
 
 
 class DatasetGenerator:
@@ -43,6 +44,7 @@ class DatasetGenerator:
         self.config = config or DatasetConfig()
         if self.config.carbon_factors is None:
             self.config.carbon_factors = self.DEFAULT_CARBON_FACTORS
+        self.energy_model = EnergyModel()
     
     def generate(self, problem_id: str = "default") -> CompositionProblem:
         """Generate a complete composition problem."""
@@ -77,7 +79,8 @@ class DatasetGenerator:
         """Generate services for a single category."""
         services = []
         
-        # Base attributes for this category
+        # Ensure carbon factors are available
+        factors = self.config.carbon_factors or self.DEFAULT_CARBON_FACTORS
         base_response = np.random.uniform(
             self.config.response_time_range[0],
             self.config.response_time_range[1]
@@ -98,19 +101,42 @@ class DatasetGenerator:
             # Throughput (inverse to response time)
             throughput = 1000.0 / response_time * np.random.uniform(0.8, 1.2)
             
-            # Energy correlated with response time
-            noise = np.random.normal(0, 0.1)
-            energy = (response_time / 1000.0) * (10 + noise)  # Base energy factor
+            # IMPROVEMENT: Comprehensive Energy Parameters
+            cpu_util = np.random.uniform(0.05, 0.4)
+            mem_usage = np.random.uniform(64, 512)
+            data_trans = np.random.uniform(0.1, 5.0)
             
-            # Add some variation independent of response time
-            energy *= np.random.uniform(0.8, 1.2)
-            
-            # Cost (correlated with quality)
-            cost = (1 - availability) * 10 + (response_time / 1000.0) * 5
+            # Real-world inspired power parameters (Watts)
+            peak_p = np.random.uniform(180, 250)
+            idle_p = np.random.uniform(80, 120)
             
             # Random region
             region = np.random.choice(self.REGIONS)
-            carbon_factor = self.config.carbon_factors[region]
+            carbon_factor = factors[region]
+            
+            # Temporary service to calculate energy
+            temp_service = Service(
+                service_id=f"s_{category_id}_{svc_id}",
+                category_id=category_id,
+                response_time=response_time,
+                availability=availability,
+                throughput=throughput,
+                energy_consumption=0.0,
+                cost=0.0,
+                carbon_factor=carbon_factor,
+                region=region,
+                cpu_utilization=cpu_util,
+                memory_usage=mem_usage,
+                data_transfer=data_trans,
+                peak_power=peak_p,
+                idle_power=idle_p
+            )
+            
+            # Calculate energy using the comprehensive model
+            energy = self.energy_model.calculate_service_energy(temp_service)
+            
+            # Cost (correlated with quality and energy)
+            cost = (1 - availability) * 10 + (response_time / 1000.0) * 5 + (energy / 100.0)
             
             service = Service(
                 service_id=f"s_{category_id}_{svc_id}",
@@ -121,16 +147,47 @@ class DatasetGenerator:
                 energy_consumption=energy,
                 cost=cost,
                 carbon_factor=carbon_factor,
-                region=region
+                region=region,
+                cpu_utilization=cpu_util,
+                memory_usage=mem_usage,
+                data_transfer=data_trans,
+                peak_power=peak_p,
+                idle_power=idle_p
+            )
+
+            
+            # Calculate energy using the comprehensive model
+            energy = self.energy_model.calculate_service_energy(temp_service)
+            
+            # Cost (correlated with quality and energy)
+            cost = (1 - availability) * 10 + (response_time / 1000.0) * 5 + (energy / 100.0)
+            
+            service = Service(
+                service_id=f"s_{category_id}_{svc_id}",
+                category_id=category_id,
+                response_time=response_time,
+                availability=availability,
+                throughput=throughput,
+                energy_consumption=energy,
+                cost=cost,
+                carbon_factor=carbon_factor,
+                region=region,
+                cpu_utilization=cpu_util,
+                memory_usage=mem_usage,
+                data_transfer=data_trans,
+                peak_power=peak_p,
+                idle_power=idle_p
             )
             services.append(service)
         
         return services
+
     
     def generate_parameter_study(
         self,
-        sizes: List[int] = None
+        sizes: Optional[List[int]] = None
     ) -> Dict[int, CompositionProblem]:
+
         """Generate problems of varying sizes for scalability study."""
         if sizes is None:
             sizes = [5, 10, 15, 20, 25]

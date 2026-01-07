@@ -29,7 +29,7 @@ class PaperVisualizer:
         'NSGA-II-Green': '#2E86AB',
         'MOPSO-Green': '#A23B72',
         'QoS-Greedy': '#F18F01',
-        'Energy-Greedy': '#C73E1D',
+        'Carbon-Greedy': '#C73E1D',
         'Random': '#6B705C',
         'GA-QoS': '#3A5A40'
     }
@@ -38,10 +38,11 @@ class PaperVisualizer:
         'NSGA-II-Green': 'o',
         'MOPSO-Green': 's',
         'QoS-Greedy': '^',
-        'Energy-Greedy': 'D',
+        'Carbon-Greedy': 'D',
         'Random': 'v',
         'GA-QoS': 'p'
     }
+
     
     def __init__(self, output_dir: str = "results/figures"):
         self.output_dir = Path(output_dir)
@@ -72,9 +73,10 @@ class PaperVisualizer:
         solutions_dict: Dict[str, List[Composition]],
         title: str = "Pareto Front Comparison",
         xlabel: str = "Response Time (ms)",
-        ylabel: str = "Energy Consumption (J)",
+        ylabel: str = "Carbon Footprint (kg CO2)",
         filename: str = "pareto_front.png"
     ):
+
         """Plot Pareto fronts for multiple algorithms."""
         fig, ax = plt.subplots()
         
@@ -334,9 +336,9 @@ class ResultsFormatter:
         metric: str = 'hypervolume'
     ) -> str:
         """Generate comparison paragraph for paper."""
-        for algo_name in sorted(results.keys(),
+        sorted_algos = sorted(results.keys(),
                                 key=lambda x: results[x].get('hypervolume_mean', 0),
-                                reverse=True):
+                                reverse=True)
         
         best = sorted_algos[0]
         second = sorted_algos[1] if len(sorted_algos) > 1 else None
@@ -344,7 +346,7 @@ class ResultsFormatter:
         improvement = 0
         if second:
             improvement = ((results[best].get(metric, 0) - results[second].get(metric, 0)) 
-                          / results[second].get(metric, 1) * 100)
+                          / (results[second].get(metric, 1) or 1.0) * 100)
         
         text = (
             f"Our proposed NSGA-II-Green achieves a hypervolume of "
@@ -352,11 +354,12 @@ class ResultsFormatter:
             f"{improvement:.1f}\\% improvement over the best baseline "
             f"({second}) with {results[second].get('hypervolume', 0):.2f}. "
             f"The algorithm found {results[best].get('num_solutions', 0)} "
-            f"Pareto-optimal solutions with an average energy consumption of "
-            f"{results[best].get('avg_energy', 0):.2f}J."
+            f"Pareto-optimal solutions with an average carbon footprint of "
+            f"{results[best].get('avg_carbon', 0):.4f}kg CO2."
         )
         
         return text
+
     
     def format_statistical_results(
         self,
@@ -405,10 +408,11 @@ class ResultsFormatter:
             summary[algo] = {
                 'hypervolume_mean': np.mean([r.get('hypervolume', 0) for r in runs.values()]),
                 'hypervolume_std': np.std([r.get('hypervolume', 0) for r in runs.values()]),
-                'energy_mean': np.mean([r.get('avg_energy', 0) for r in runs.values()]),
-                'energy_std': np.std([r.get('avg_energy', 0) for r in runs.values()]),
+                'carbon_mean': np.mean([r.get('avg_carbon', 0) for r in runs.values()]),
+                'carbon_std': np.std([r.get('avg_carbon', 0) for r in runs.values()]),
                 'num_solutions_mean': np.mean([r.get('num_solutions', 0) for r in runs.values()]),
                 'runtime_mean': np.mean([r.get('runtime', 0) for r in runs.values()])
             }
+
         
         return summary

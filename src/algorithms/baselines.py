@@ -39,16 +39,17 @@ class QoSGreedy:
         problem: CompositionProblem
     ) -> np.ndarray:
         response_time = sum(s.response_time for s in services)
-        energy = sum(s.energy_consumption for s in services)
+        carbon = sum(s.carbon_emission for s in services)
         cost = sum(s.cost for s in services)
-        return np.array([response_time, energy, cost])
+        return np.array([response_time, carbon, cost])
 
 
-class EnergyGreedy:
-    """Greedy algorithm minimizing energy only."""
+class CarbonGreedy:
+    """Greedy algorithm minimizing carbon only."""
     
     def optimize(self, problem: CompositionProblem) -> List[Composition]:
-        return QoSGreedy(objective='energy_consumption').optimize(problem)
+        return QoSGreedy(objective='carbon_emission').optimize(problem)
+
 
 
 class RandomSearch:
@@ -69,14 +70,15 @@ class RandomSearch:
             ]
             
             response_time = sum(s.response_time for s in selected)
-            energy = sum(s.energy_consumption for s in selected)
+            carbon = sum(s.carbon_emission for s in selected)
             cost = sum(s.cost for s in selected)
             
             solutions.append(Composition(
                 composition_id=f"random_{_}",
                 selected_services=selected,
-                objectives=np.array([response_time, energy, cost])
+                objectives=np.array([response_time, carbon, cost])
             ))
+
         
         # Return Pareto front
         return self._extract_pareto(solutions, problem)
@@ -178,16 +180,17 @@ class GeneticAlgorithmQoS:
     
     def _evaluate_encoding(self, encoding: np.ndarray, problem: CompositionProblem) -> np.ndarray:
         response_time = 0.0
-        energy = 0.0
+        carbon = 0.0
         cost = 0.0
         
         for cat_idx, svc_idx in enumerate(encoding):
             service = problem.categories[cat_idx].services[svc_idx]
             response_time += service.response_time
-            energy += service.energy_consumption
+            carbon += service.carbon_emission
             cost += service.cost
         
-        return np.array([response_time, energy, cost])
+        return np.array([response_time, carbon, cost])
+
     
     def _tournament_select(
         self,
@@ -314,16 +317,17 @@ class MOPSOGreen:
     
     def _evaluate(self, encoding: np.ndarray, problem: CompositionProblem) -> np.ndarray:
         response_time = 0.0
-        energy = 0.0
+        carbon = 0.0
         cost = 0.0
         
         for cat_idx, svc_idx in enumerate(encoding):
             service = problem.categories[cat_idx].services[svc_idx]
             response_time += service.response_time
-            energy += service.energy_consumption
+            carbon += service.carbon_emission
             cost += service.cost
         
-        return np.array([response_time, energy, cost])
+        return np.array([response_time, carbon, cost])
+
     
     def _dominates(self, a: np.ndarray, b: np.ndarray) -> bool:
         return bool(np.all(a <= b) and np.any(a < b))

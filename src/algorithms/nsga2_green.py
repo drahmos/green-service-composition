@@ -50,16 +50,17 @@ class NSGAIIGreen(BaseAlgorithm):
     ) -> np.ndarray:
         """Evaluate objectives for a given encoding."""
         response_time = 0.0
-        energy = 0.0
+        carbon_emission = 0.0
         cost = 0.0
         
         for cat_idx, service_idx in enumerate(encoding):
             service = problem.categories[cat_idx].services[service_idx]
             response_time += service.response_time
-            energy += service.energy_consumption
+            carbon_emission += service.carbon_emission
             cost += service.cost
         
-        return np.array([response_time, energy, cost])
+        return np.array([response_time, carbon_emission, cost])
+
     
     def _evaluate(self, individual: np.ndarray, problem: CompositionProblem) -> np.ndarray:
         """Evaluate objectives (individual = [encoding..., objectives...]."""
@@ -269,8 +270,8 @@ class NSGAIIGreen(BaseAlgorithm):
             
             if verbose and generation % 20 == 0:
                 pareto = self._extract_pareto_front(population, problem)
-                best_energy = min(c.energy for c in pareto) if pareto else float('inf')
-                print(f"Gen {generation}: HV = {self._calculate_hypervolume(pareto):.2f}, Best Energy = {best_energy:.2f}J")
+                best_carbon = min(c.carbon_emission for c in pareto) if pareto else float('inf')
+                print(f"Gen {generation}: HV = {self._calculate_hypervolume(pareto):.2f}, Best Carbon = {best_carbon:.4f}kg")
         
         return self._extract_pareto_front(population, problem)
     
@@ -280,9 +281,12 @@ class NSGAIIGreen(BaseAlgorithm):
         if not solutions:
             return 0.0
         
+        objectives = np.array([s.objectives for s in solutions])
+        
         if reference_point is None:
-            objectives = np.array([s.objectives for s in solutions])
-            reference_point = np.max(objectives, axis=0) + 0.1 * np.max(objectives, axis=0)
+            # Type hint assistance for linter
+            computed_ref: np.ndarray = np.max(objectives, axis=0) + 0.1 * np.max(objectives, axis=0)
+            reference_point = computed_ref
         
         hv = 0.0
         sorted_solutions = sorted(solutions, key=lambda s: s.response_time)
@@ -295,9 +299,10 @@ class NSGAIIGreen(BaseAlgorithm):
                 next_response = sorted_solutions[i + 1].response_time
             
             width = next_response - prev_response
-            height = reference_point[1] - sol.energy
+            height = reference_point[1] - sol.carbon_emission
             if height > 0:
                 hv += width * height
             prev_response = sol.response_time
         
         return hv
+

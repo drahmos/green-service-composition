@@ -13,7 +13,8 @@ sys.path.insert(0, os.path.abspath('.'))
 
 from src.datasets import generate_dataset
 from src.algorithms import NSGAIIGreen
-from src.algorithms.baselines import QoSGreedy, EnergyGreedy, RandomSearch, MOPSOGreen
+from src.algorithms.baselines import QoSGreedy, CarbonGreedy, RandomSearch, MOPSOGreen
+
 from src.evaluation import MetricsCalculator
 from src.visualization import PaperVisualizer, ResultsFormatter
 
@@ -57,8 +58,9 @@ def run_quick_experiment(
             swarm_size=80, num_iterations=generations, archive_size=80, seed=s
         ),
         'QoS-Greedy': lambda s: QoSGreedy(objective='response_time'),
-        'Energy-Greedy': lambda s: EnergyGreedy(),
+        'Carbon-Greedy': lambda s: CarbonGreedy(),
         'Random': lambda s: RandomSearch(num_samples=500, seed=s)
+
     }
     
     results = {}
@@ -85,14 +87,15 @@ def run_quick_experiment(
         results[algo_name] = {
             'hypervolume_mean': np.mean([r['hypervolume'] for r in algo_results]),
             'hypervolume_std': np.std([r['hypervolume'] for r in algo_results]),
-            'energy_mean': np.mean([r['avg_energy'] for r in algo_results]),
-            'energy_std': np.std([r['avg_energy'] for r in algo_results]),
+            'carbon_mean': np.mean([r['avg_carbon'] for r in algo_results]),
+            'carbon_std': np.std([r['avg_carbon'] for r in algo_results]),
             'num_solutions': np.mean([r['num_solutions'] for r in algo_results]),
             'total_runtime': runtime
         }
         
         print(f"HV={results[algo_name]['hypervolume_mean']:.2e}, "
-              f"Energy={results[algo_name]['energy_mean']:.2f}J")
+              f"Carbon={results[algo_name]['carbon_mean']:.4f}kg")
+
     
     # Print results table
     print("\n" + "=" * 60)
@@ -100,24 +103,25 @@ def run_quick_experiment(
     print("=" * 60)
     
     print("\n{:<20} {:>12} {:>12} {:>10}".format(
-        "Algorithm", "Hypervolume", "Energy (J)", "|PF|"
+        "Algorithm", "Hypervolume", "Carbon (kg)", "|PF|"
     ))
     print("-" * 58)
     
     for algo_name in sorted(results.keys(),
                            key=lambda x: -results[x]['hypervolume_mean']):
         r = results[algo_name]
-        print("{:<20} {:>12.2e} {:>12.2f} {:>10.1f}".format(
-            algo_name, r['hypervolume_mean'], r['energy_mean'], r['num_solutions']
+        print("{:<20} {:>12.2e} {:>12.4f} {:>10.1f}".format(
+            algo_name, r['hypervolume_mean'], r['carbon_mean'], r['num_solutions']
         ))
     
-    # Energy savings
-    qos_energy = results['QoS-Greedy']['energy_mean']
-    nsga_energy = results['NSGA-II-Green']['energy_mean']
-    savings = (qos_energy - nsga_energy) / qos_energy * 100
+    # Carbon savings
+    qos_carbon = results['QoS-Greedy']['carbon_mean']
+    nsga_carbon = results['NSGA-II-Green']['carbon_mean']
+    savings = (qos_carbon - nsga_carbon) / qos_carbon * 100
     
     print("\n" + "-" * 58)
-    print(f"Energy Savings (NSGA-II-Green vs QoS-Greedy): {savings:.1f}%")
+    print(f"Carbon Savings (NSGA-II-Green vs QoS-Greedy): {savings:.1f}%")
+
     
     # Generate visualization
     print("\nGenerating visualization...")
@@ -140,10 +144,11 @@ def run_quick_experiment(
     formatter = ResultsFormatter()
     latex_table = formatter.format_latex_table(
         results,
-        columns=['hypervolume_mean', 'num_solutions', 'energy_mean'],
+        columns=['hypervolume_mean', 'num_solutions', 'carbon_mean'],
         caption="Quick experiment results (mean over 10 runs).",
         label="tab:quick_results"
     )
+
     
     print("\n" + "=" * 60)
     print("LATEX TABLE FOR PAPER")
